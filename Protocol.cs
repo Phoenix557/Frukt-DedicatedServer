@@ -23,7 +23,33 @@ namespace Multiplayer
         Info = 14,
         Chat = 15,
         AvatarAsk = 16,
-        AvatarPart = 17
+        AvatarPart = 17,
+        WorldSweep = 18
+    }
+
+    enum Sweep : byte
+    {
+        /// <summary>
+        /// NPCs that have been dead for at least the sweep's age.
+        /// </summary>
+        Bodies = 1,
+        /// <summary>
+        /// Every NPC, alive or dead. Other players are never swept.
+        /// </summary>
+        Everyone = 2
+    }
+
+    /// <summary>
+    /// A clean-up every screen runs on the NPCs it simulates, so the same ones go everywhere.
+    /// </summary>
+    sealed class SweepOrder
+    {
+        public byte From;
+        public Sweep What;
+        /// <summary>
+        /// For Bodies: how many seconds a body must have been dead. 0 takes every dead one.
+        /// </summary>
+        public ushort DeadFor;
     }
 
     /// <summary>
@@ -167,7 +193,7 @@ namespace Multiplayer
 
     static class Wire
     {
-        public const ushort Protocol = 7;
+        public const ushort Protocol = 8;
         public const int MaxPlayers = 8;
         /// <summary>
         /// Queries are padded to this size so answering one never sends back more than was received.
@@ -354,6 +380,37 @@ namespace Multiplayer
             foreach (char c in text)
                 clean.Append(char.IsControl(c) ? ' ' : c);
             return Clip(clean.ToString().Trim(), MaxChat);
+        }
+
+        /// <summary>
+        /// World packets carry the sender's id in their second byte and are passed on to everyone else.
+        /// </summary>
+        public static bool IsWorld(Kind kind)
+        {
+            return kind >= Kind.WorldSpawn && kind <= Kind.WorldCut || kind == Kind.WorldSweep;
+        }
+
+        public static byte[] WriteSweep(SweepOrder order)
+        {
+            return Write(Kind.WorldSweep, w =>
+            {
+                w.Write(order.From);
+                w.Write((byte)order.What);
+                w.Write(order.DeadFor);
+            });
+        }
+
+        /// <summary>
+        /// Reads a sweep from a whole world packet, the kind byte included.
+        /// </summary>
+        public static SweepOrder ReadSweep(byte[] data)
+        {
+            if (data.Length < 5)
+                throw new InvalidDataException("A sweep is too short.");
+            var what = (Sweep)data[2];
+            if (what != Sweep.Bodies && what != Sweep.Everyone)
+                throw new InvalidDataException("Unknown sweep " + data[2] + ".");
+            return new SweepOrder { From = data[1], What = what, DeadFor = BitConverter.ToUInt16(data, 3) };
         }
 
         public static byte[] WriteAvatarAsk(byte owner, uint hash)

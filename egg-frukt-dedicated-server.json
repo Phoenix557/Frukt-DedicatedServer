@@ -59,6 +59,16 @@
             "field_type": "text"
         },
         {
+            "name": "Body Cleanup",
+            "description": "Seconds an NPC's dead body stays before it is removed from every player's game. 0 keeps bodies until someone types clearbodies in the console.",
+            "env_variable": "BODY_CLEANUP",
+            "default_value": "120",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:0,65535",
+            "field_type": "text"
+        },
+        {
             "name": "Auto Update",
             "description": "1 downloads the newest FruktServer from GitHub releases on every start; 0 keeps the file you have.",
             "env_variable": "AUTO_UPDATE",

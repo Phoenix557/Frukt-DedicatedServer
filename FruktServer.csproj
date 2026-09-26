@@ -8,7 +8,7 @@
     <AssemblyName>FruktServer</AssemblyName>
     <RootNamespace>FruktServer</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <NoWarn>$(NoWarn);CS0649</NoWarn>
   </PropertyGroup>
 

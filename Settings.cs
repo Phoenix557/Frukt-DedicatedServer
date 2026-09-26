@@ -13,6 +13,10 @@ namespace FruktServer
         public int Port = 27777;
         public string Map = "Yard";
         public int MaxPlayers = Multiplayer.Wire.MaxPlayers;
+        /// <summary>
+        /// Seconds an NPC's body stays after it dies; 0 keeps bodies until someone clears them.
+        /// </summary>
+        public int BodyCleanup = 120;
 
         public static Settings Read(string[] args)
         {
@@ -21,6 +25,7 @@ namespace FruktServer
             s.Apply("port", Environment.GetEnvironmentVariable("SERVER_PORT"));
             s.Apply("map", Environment.GetEnvironmentVariable("MAP"));
             s.Apply("max-players", Environment.GetEnvironmentVariable("MAX_PLAYERS"));
+            s.Apply("body-cleanup", Environment.GetEnvironmentVariable("BODY_CLEANUP"));
             for (int i = 0; i < args.Length; i++)
             {
                 string arg = args[i];
@@ -43,7 +48,7 @@ namespace FruktServer
         bool Apply(string key, string value)
         {
             if (string.IsNullOrWhiteSpace(value))
-                return key == "name" || key == "port" || key == "map" || key == "max-players";
+                return key == "name" || key == "port" || key == "map" || key == "max-players" || key == "body-cleanup";
             value = value.Trim();
             switch (key)
             {
@@ -63,6 +68,11 @@ namespace FruktServer
                         throw new ArgumentException("Max players must be a number from 1 to " + MostPlayers + ", not \"" + value + "\".");
                     MaxPlayers = max;
                     return true;
+                case "body-cleanup":
+                    if (!int.TryParse(value, out int seconds) || seconds < 0 || seconds > ushort.MaxValue)
+                        throw new ArgumentException("Body cleanup must be a number of seconds from 0 (off) to " + ushort.MaxValue + ", not \"" + value + "\".");
+                    BodyCleanup = seconds;
+                    return true;
             }
             return false;
         }
@@ -75,6 +85,8 @@ namespace FruktServer
             Console.WriteLine("  --port <number>        UDP port                     (env SERVER_PORT, default 27777)");
             Console.WriteLine("  --map <name>           map players load, e.g. Yard  (env MAP, default Yard)");
             Console.WriteLine("  --max-players <1-" + MostPlayers + ">  player limit                 (env MAX_PLAYERS, default " + Multiplayer.Wire.MaxPlayers + ")");
+            Console.WriteLine("  --body-cleanup <sec>   remove NPC bodies this long  (env BODY_CLEANUP, default 120, 0 = never)");
+            Console.WriteLine("                         after they die");
         }
     }
 }

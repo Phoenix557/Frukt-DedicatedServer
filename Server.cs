@@ -19,6 +19,7 @@ namespace FruktServer
         const double StateEvery = 0.1;
         const double AskAvatarEvery = 2.0;
         const float ChatBurst = 4f;
+        const double CleanupEvery = 10.0;
 
         sealed class Client
         {
@@ -32,6 +33,7 @@ namespace FruktServer
             public double AskedAt = -100.0;
             public float ChatTokens = ChatBurst;
             public double ChatAt;
+            public double SweptAt = -100.0;
             public string Name => State != null && State.Name.Length > 0 ? State.Name : "Player " + Id;
         }
 
@@ -45,6 +47,7 @@ namespace FruktServer
         readonly byte[] _buffer = new byte[65536];
         byte _keeper;
         double _lastState = -100.0;
+        double _lastCleanup;
         long _bytesIn, _bytesOut;
 
         public double Now => _clock.Elapsed.TotalSeconds;
@@ -84,6 +87,61 @@ namespace FruktServer
             AskForPictures(now);
             if (now - _lastState >= StateEvery)
                 SendOwnState();
+            if (_settings.BodyCleanup > 0 && now - _lastCleanup >= CleanupEvery)
+            {
+                _lastCleanup = now;
+                SendSweep(Sweep.Bodies, (ushort)_settings.BodyCleanup);
+            }
+        }
+
+        /// <summary>
+        /// Asks every game in a map to remove its NPCs' bodies (dead at least deadFor seconds), or every NPC. Each game removes the
+        /// ones it simulates, so they go from every screen together; players' own bodies are never touched.
+        /// </summary>
+        void SendSweep(Sweep what, ushort deadFor)
+        {
+            byte[] data = Wire.WriteSweep(new SweepOrder { From = 0, What = what, DeadFor = deadFor });
+            foreach (Client client in _clients.Values)
+            {
+                if (InGame(client))
+                    Send(client.EndPoint, data);
+            }
+        }
+
+        public void ClearBodies()
+        {
+            SendSweep(Sweep.Bodies, 0);
+            Log(InGameCount() == 0 ? "Nobody is in a map, so there are no bodies to clear." : "Cleared the dead bodies.");
+        }
+
+        public void ClearNpcs()
+        {
+            SendSweep(Sweep.Everyone, 0);
+            Log(InGameCount() == 0 ? "Nobody is in a map, so there are no NPCs to delete." : "Deleted every NPC.");
+        }
+
+        /// <summary>
+        /// Logs a player's clean-up. False when they already sent one this second, so it is not passed on.
+        /// </summary>
+        bool Swept(Client client, SweepOrder order, double now)
+        {
+            if (now - client.SweptAt < 1.0)
+                return false;
+            client.SweptAt = now;
+            if (order.DeadFor == 0)
+                Log(client.Name + (order.What == Sweep.Everyone ? " deleted every NPC." : " cleared the dead bodies."));
+            return true;
+        }
+
+        int InGameCount()
+        {
+            int n = 0;
+            foreach (Client client in _clients.Values)
+            {
+                if (InGame(client))
+                    n++;
+            }
+            return n;
         }
 
         /// <summary>
@@ -193,12 +251,14 @@ namespace FruktServer
                 return;
             client.HeardAt = now;
 
-            if (kind >= Kind.WorldSpawn && kind <= Kind.WorldCut)
+            if (Wire.IsWorld(kind))
             {
-                if (data.Length < 2)
+                if (data.Length < 2 || !InGame(client))
                     return;
                 data[1] = client.Id;
-                SendToAllBut(client, data);
+                if (kind == Kind.WorldSweep && !Swept(client, Wire.ReadSweep(data), now))
+                    return;
+                SendToScene(client, data);
                 return;
             }
 
@@ -468,6 +528,18 @@ namespace FruktServer
                 _refusedAt.Clear();
             _refusedAt[key] = now;
             Log(message);
+        }
+
+        /// <summary>
+        /// World packets only matter to players on the sender's map; everyone else would throw them away.
+        /// </summary>
+        void SendToScene(Client sender, byte[] data)
+        {
+            foreach (Client other in _clients.Values)
+            {
+                if (other != sender && other.State != null && other.State.Scene == sender.State.Scene)
+                    Send(other.EndPoint, data);
+            }
         }
 
         void SendToAllBut(Client sender, byte[] data)

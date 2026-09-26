@@ -43,6 +43,7 @@ namespace FruktServer
             new Thread(ReadCommands) { IsBackground = true, Name = "console" }.Start();
 
             Server.Log("FruktServer " + typeof(Program).Assembly.GetName().Version.ToString(3) + ", protocol " + Wire.Protocol + ".");
+            Server.Log(settings.BodyCleanup > 0 ? "NPC bodies are removed " + settings.BodyCleanup + " seconds after they die." : "NPC bodies stay until someone clears them.");
             Server.Log(settings.Name + " is up on UDP port " + settings.Port + ", map " + settings.Map + ", up to " + settings.MaxPlayers + " players. Type help for commands.");
 
             using (server)
@@ -90,7 +91,14 @@ namespace FruktServer
             {
                 case "help":
                 case "?":
-                    Server.Log("Commands: status, players, say <message>, kick <id or name>, stop.");
+                    Server.Log("Commands: status, players, say <message>, kick <id or name>, clearbodies, clearnpcs, stop.");
+                    return;
+                case "clearbodies":
+                case "cleanup":
+                    server.ClearBodies();
+                    return;
+                case "clearnpcs":
+                    server.ClearNpcs();
                     return;
                 case "say":
                     if (rest.Length == 0)
