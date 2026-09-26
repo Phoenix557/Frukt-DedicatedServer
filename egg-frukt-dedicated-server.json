@@ -60,7 +60,7 @@
         },
         {
             "name": "Auto Update",
-            "description": "1 replaces FruktServer with the newest version on every start; 0 keeps the file you have.",
+            "description": "1 downloads the newest FruktServer from GitHub releases on every start; 0 keeps the file you have.",
             "env_variable": "AUTO_UPDATE",
             "default_value": "1",
             "user_viewable": true,

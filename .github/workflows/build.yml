@@ -1,7 +1,8 @@
 name: Build
 
-# Every push to main rebuilds ghcr.io/phoenix557/frukt-server:latest, which Pterodactyl pulls when the server starts.
-# Pushing a tag like v1.0.1 also attaches FruktServer (Linux) and FruktServer.exe (Windows) to a GitHub release.
+# Every push to main rebuilds ghcr.io/phoenix557/frukt-server:latest.
+# Pushing a tag like v1.2.1 also makes a GitHub release with FruktServer (Linux) and FruktServer.exe (Windows);
+# servers with AUTO_UPDATE=1 download it on their next start. Bump <Version> in FruktServer.csproj to match.
 on:
   push:
     branches: [main]
@@ -26,9 +27,11 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Publish FruktServer for the image
-        run: >
-          dotnet publish FruktServer.csproj -c Release -r linux-x64 --self-contained
-          -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o docker/bin --nologo
+        run: |
+          version=""
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="-p:Version=${GITHUB_REF_NAME#v}"; fi
+          dotnet publish FruktServer.csproj -c Release -r linux-x64 --self-contained $version \
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o docker/bin --nologo
 
       - uses: docker/login-action@v3
         with:
@@ -62,7 +65,7 @@ jobs:
       - name: Publish standalone servers
         run: |
           for rid in linux-x64 win-x64; do
-            dotnet publish FruktServer.csproj -c Release -r $rid --self-contained \
+            dotnet publish FruktServer.csproj -c Release -r $rid --self-contained -p:Version=${GITHUB_REF_NAME#v} \
               -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o out/$rid --nologo
           done
           mkdir dist

@@ -25,6 +25,8 @@ namespace FruktServer
                 return 2;
             }
 
+            Updater.Run(args);
+
             Server server;
             try
             {

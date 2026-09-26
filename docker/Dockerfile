@@ -1,12 +1,13 @@
 # Image for the FRUKT dedicated server on Pterodactyl. FruktServer is one self-contained file (build-image.ps1 publishes it
 # into docker/bin), so the image needs no .NET, no Wine and no game: players' games run the world, the server passes packets.
-# The egg installs FruktServer into /home/container; the image keeps a copy so a restart can update it.
+# The egg installs FruktServer into /home/container and it updates itself from GitHub releases (AUTO_UPDATE=1);
+# the image keeps a copy for servers that have none yet.
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.source=https://github.com/Phoenix557/Frukt-DedicatedServer
 LABEL org.opencontainers.image.description="Dedicated server for the FRUKT Multiplayer mod"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tini tzdata \
+    && apt-get install -y --no-install-recommends tini tzdata ca-certificates libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -d /home/container -s /bin/sh container
 
