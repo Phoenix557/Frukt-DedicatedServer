@@ -27,7 +27,7 @@ jobs:
 
       - name: Publish FruktServer for the image
         run: >
-          dotnet publish FruktServer.csproj -c Release -r linux-musl-x64 --self-contained
+          dotnet publish FruktServer.csproj -c Release -r linux-x64 --self-contained
           -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o docker/bin --nologo
 
       - uses: docker/login-action@v3

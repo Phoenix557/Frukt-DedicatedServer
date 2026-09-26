@@ -15,7 +15,7 @@ foreach ($file in "Dockerfile", "entrypoint.sh") {
 }
 
 $bin = Join-Path $context "bin"
-dotnet publish (Join-Path $PSScriptRoot "FruktServer.csproj") -c Release -r linux-musl-x64 --self-contained `
+dotnet publish (Join-Path $PSScriptRoot "FruktServer.csproj") -c Release -r linux-x64 --self-contained `
     -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o $bin --nologo -v q
 if ($LASTEXITCODE -ne 0) { throw "FruktServer did not build." }
 

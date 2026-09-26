@@ -7,13 +7,13 @@
     "exported_at": "2026-09-26T00:00:00+00:00",
     "name": "FRUKT Dedicated Server",
     "author": "phoenix557@users.noreply.github.com",
-    "description": "A dedicated server for the FRUKT Multiplayer mod (github.com/Phoenix557). It runs no game, so it needs almost no CPU or memory; the players' games share the world. Players join with the server's IP and port, or find it in the MULTIPLAYER menu on their network.",
+    "description": "A dedicated server for the FRUKT Multiplayer mod (github.com/Phoenix557/Frukt-DedicatedServer). It runs no game, so it needs almost no CPU or memory; the players' games share the world. The installer puts FruktServer in the server's folder. Players join with the server's IP and port.",
     "features": null,
     "docker_images": {
         "FRUKT": "ghcr.io/phoenix557/frukt-server:latest"
     },
     "file_denylist": [],
-    "startup": "/opt/frukt/FruktServer",
+    "startup": "./FruktServer",
     "config": {
         "files": "{}",
         "startup": "{\"done\": \"is up on UDP port\"}",
@@ -22,9 +22,9 @@
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/sh\n# FruktServer is inside the Docker image, so there is nothing to download.\nmkdir -p /mnt/server\necho \"Install finished. The server is in the image; just start it.\"\n",
-            "container": "alpine:3.22",
-            "entrypoint": "sh"
+            "script": "#!/bin/bash\n# Downloads FruktServer from the latest GitHub release into the server's folder (/home/container).\nset -e\nmkdir -p /mnt/server\ncd /mnt/server\n\nif ! command -v curl >/dev/null 2>&1; then\n    apt-get update >/dev/null 2>&1\n    apt-get install -y curl ca-certificates >/dev/null 2>&1\nfi\n\nURL=https://github.com/Phoenix557/Frukt-DedicatedServer/releases/latest/download/FruktServer\necho \"Downloading ${URL}\"\ncurl -fsSL \"${URL}\" -o FruktServer.new\nmv -f FruktServer.new FruktServer\nchmod +x FruktServer\necho \"Installed FruktServer ($(du -h FruktServer | cut -f1)). Start the server.\"\n",
+            "container": "ghcr.io/parkervcp/installers:debian",
+            "entrypoint": "bash"
         }
     },
     "variables": [
@@ -56,6 +56,16 @@
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|integer|between:1,16",
+            "field_type": "text"
+        },
+        {
+            "name": "Auto Update",
+            "description": "1 replaces FruktServer with the newest version on every start; 0 keeps the file you have.",
+            "env_variable": "AUTO_UPDATE",
+            "default_value": "1",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
             "field_type": "text"
         }
     ]
