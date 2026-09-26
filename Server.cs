@@ -17,6 +17,8 @@ namespace FruktServer
     {
         const double Timeout = 5.0;
         const double StateEvery = 0.1;
+        const double AskAvatarEvery = 2.0;
+        const float ChatBurst = 4f;
 
         sealed class Client
         {
@@ -26,6 +28,10 @@ namespace FruktServer
             public double HeardAt;
             public double JoinedAt;
             public PeerState State;
+            public AvatarImage Picture;
+            public double AskedAt = -100.0;
+            public float ChatTokens = ChatBurst;
+            public double ChatAt;
             public string Name => State != null && State.Name.Length > 0 ? State.Name : "Player " + Id;
         }
 
@@ -75,8 +81,65 @@ namespace FruktServer
                 Drop(client, " timed out");
 
             ChooseKeeper();
+            AskForPictures(now);
             if (now - _lastState >= StateEvery)
                 SendOwnState();
+        }
+
+        /// <summary>
+        /// Collects each player's picture from their own game, so it can hand it to everyone else.
+        /// </summary>
+        void AskForPictures(double now)
+        {
+            foreach (Client client in _clients.Values)
+            {
+                uint hash = client.State == null ? 0 : client.State.Avatar;
+                if (hash == 0 || client.Picture != null && client.Picture.Hash == hash && client.Picture.Complete)
+                    continue;
+                if (now - client.AskedAt < AskAvatarEvery)
+                    continue;
+                client.AskedAt = now;
+                Send(client.EndPoint, Wire.WriteAvatarAsk(client.Id, hash));
+            }
+        }
+
+        /// <summary>
+        /// Passes a chat line to everyone with the sender's name on it, a few lines a second at most per player.
+        /// </summary>
+        void Say(Client client, string text, double now)
+        {
+            text = Wire.CleanChat(text);
+            if (text.Length == 0)
+                return;
+            string name = _settings.Name;
+            byte from = 0;
+            if (client != null)
+            {
+                client.ChatTokens = Math.Min(ChatBurst, client.ChatTokens + (float)(now - client.ChatAt));
+                client.ChatAt = now;
+                if (client.ChatTokens < 1f)
+                    return;
+                client.ChatTokens -= 1f;
+                name = client.Name;
+                from = client.Id;
+            }
+            Log("[Chat] " + name + ": " + text);
+            byte[] data = Wire.WriteChat(new ChatLine { From = from, Name = name, Text = text });
+            foreach (Client other in _clients.Values)
+                Send(other.EndPoint, data);
+        }
+
+        /// <summary>
+        /// Chat from the console, shown as the server's name.
+        /// </summary>
+        public void Say(string text)
+        {
+            if (_clients.Count == 0)
+            {
+                Log("Nobody is connected to hear that.");
+                return;
+            }
+            Say(null, text, Now);
         }
 
         void Drain()
@@ -102,7 +165,7 @@ namespace FruktServer
                 {
                     Handle(data, (IPEndPoint)from);
                 }
-                catch (Exception e) when (e is EndOfStreamException || e is IOException || e is ArgumentException)
+                catch (Exception e) when (e is EndOfStreamException || e is IOException || e is ArgumentException || e is InvalidDataException)
                 {
                 }
             }
@@ -180,6 +243,29 @@ namespace FruktServer
                     ShotNotice shot = Wire.ReadShot(reader);
                     shot.Shooter = client.Id;
                     SendToAllBut(client, Wire.WriteShot(shot));
+                    return;
+
+                case Kind.Chat:
+                    Say(client, Wire.ReadChat(reader).Text, now);
+                    return;
+
+                case Kind.AvatarAsk:
+                    Wire.ReadAvatarAsk(reader, out byte owner, out uint hash);
+                    Client pictured = ById(owner);
+                    AvatarImage picture = pictured?.Picture;
+                    if (picture == null || picture.Hash != hash || !picture.Complete)
+                        return;
+                    for (int i = 0; i < picture.Parts.Length; i++)
+                        Send(from, Wire.WriteAvatarPart(owner, picture, i));
+                    return;
+
+                case Kind.AvatarPart:
+                    AvatarPart part = Wire.ReadAvatarPart(reader);
+                    if (part.Owner != client.Id || client.State == null || client.State.Avatar != part.Hash)
+                        return;
+                    if (client.Picture == null || client.Picture.Hash != part.Hash)
+                        client.Picture = new AvatarImage { Hash = part.Hash };
+                    client.Picture.Add(part);
                     return;
             }
         }
@@ -293,7 +379,8 @@ namespace FruktServer
             {
                 string where = client.State == null ? "connecting" : Where(client.State.Scene);
                 string keeper = client.Id == _keeper ? ", runs the shared world" : "";
-                Log("  " + client.Id + "  " + client.Name + "  " + where + ", " + client.EndPoint.Address + ", " + Minutes(Now - client.JoinedAt) + keeper);
+                string picture = client.Picture != null && client.Picture.Complete ? ", has a picture" : "";
+                Log("  " + client.Id + "  " + client.Name + "  " + where + ", " + client.EndPoint.Address + ", " + Minutes(Now - client.JoinedAt) + picture + keeper);
             }
         }
 

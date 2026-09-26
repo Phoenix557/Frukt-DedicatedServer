@@ -88,7 +88,13 @@ namespace FruktServer
             {
                 case "help":
                 case "?":
-                    Server.Log("Commands: status, players, kick <id or name>, stop.");
+                    Server.Log("Commands: status, players, say <message>, kick <id or name>, stop.");
+                    return;
+                case "say":
+                    if (rest.Length == 0)
+                        Server.Log("Usage: say <message>. Players see it in chat as the server's name.");
+                    else
+                        server.Say(rest);
                     return;
                 case "status":
                     server.Status();
