@@ -8,7 +8,7 @@
     <AssemblyName>FruktServer</AssemblyName>
     <RootNamespace>FruktServer</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <Version>1.3.0</Version>
+    <Version>1.4.0</Version>
     <NoWarn>$(NoWarn);CS0649</NoWarn>
   </PropertyGroup>
 
@@ -16,8 +16,14 @@
     <Compile Remove="docker\**;dist\**" />
   </ItemGroup>
 
-  <!-- Protocol.cs belongs to the Multiplayer mod; this copy keeps the repo buildable on its own (GitHub Actions). -->
+  <ItemGroup>
+    <PackageReference Include="BepuPhysics" Version="2.4.0" />
+    <TrimmerRootAssembly Include="BepuPhysics" />
+    <TrimmerRootAssembly Include="BepuUtilities" />
+  </ItemGroup>
+
+  <!-- Protocol.cs and Shapes.cs belong to the Multiplayer mod; these copies keep the repo buildable on its own (GitHub Actions). -->
   <Target Name="SyncProtocol" BeforeTargets="BeforeBuild" Condition="Exists('..\Frukt-Multiplayer\Protocol.cs')">
-    <Copy SourceFiles="..\Frukt-Multiplayer\Protocol.cs" DestinationFiles="Protocol.cs" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="..\Frukt-Multiplayer\Protocol.cs;..\Frukt-Multiplayer\Shapes.cs" DestinationFolder="$(MSBuildProjectDirectory)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

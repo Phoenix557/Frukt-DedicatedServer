@@ -24,7 +24,21 @@ namespace Multiplayer
         Chat = 15,
         AvatarAsk = 16,
         AvatarPart = 17,
-        WorldSweep = 18
+        WorldSweep = 18,
+        /// <summary>
+        /// Server to a player: send the collision of the map you are on (all of it, or the listed pieces).
+        /// </summary>
+        MapAsk = 19,
+        MapPart = 20,
+        /// <summary>
+        /// Player to server: the collision shapes of one shared thing's bodies.
+        /// </summary>
+        ShapeInfo = 21,
+        ShapeAsk = 22,
+        /// <summary>
+        /// Player to server: this thing of mine is at rest and nobody holds it, so the server may simulate it.
+        /// </summary>
+        WorldGive = 23
     }
 
     enum Sweep : byte
@@ -188,12 +202,16 @@ namespace Multiplayer
         /// Fingerprint of their picture, or 0 for none. Ask for it (AvatarAsk) when it is new to you.
         /// </summary>
         public uint Avatar;
+        /// <summary>
+        /// On a relay server, the map whose props and items the server simulates itself, or empty while it has none loaded.
+        /// </summary>
+        public string Simulating = "";
         public double HeardAt;
     }
 
     static class Wire
     {
-        public const ushort Protocol = 8;
+        public const ushort Protocol = 9;
         public const int MaxPlayers = 8;
         /// <summary>
         /// Queries are padded to this size so answering one never sends back more than was received.
@@ -265,6 +283,7 @@ namespace Multiplayer
                 w.Write(s.Relay);
                 w.Write(s.Keeper);
                 w.Write(s.Avatar);
+                w.Write(Clip(s.Simulating, MaxScene));
             });
         }
 
@@ -295,7 +314,8 @@ namespace Multiplayer
                 Hidden = r.ReadBoolean(),
                 Relay = r.ReadBoolean(),
                 Keeper = r.ReadByte(),
-                Avatar = r.ReadUInt32()
+                Avatar = r.ReadUInt32(),
+                Simulating = Clip(r.ReadString(), MaxScene)
             };
         }
 

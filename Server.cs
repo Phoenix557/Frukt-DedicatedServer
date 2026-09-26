@@ -10,10 +10,10 @@ using Multiplayer;
 namespace FruktServer
 {
     /// <summary>
-    /// Plays host id 0 for the mod without running the game: it passes packets between players and names one of them,
-    /// the keeper, whose screen runs the shared world (map props, NPCs, things whose owner left).
+    /// Plays host id 0 for the mod without running the game: it passes packets between players, simulates props and items with its
+    /// own physics, and names one player, the keeper, whose screen runs the NPCs and sends the map's collision.
     /// </summary>
-    sealed class Server : IDisposable
+    sealed partial class Server : IDisposable
     {
         const double Timeout = 5.0;
         const double StateEvery = 0.1;
@@ -84,6 +84,7 @@ namespace FruktServer
                 Drop(client, " timed out");
 
             ChooseKeeper();
+            TickWorld(now);
             AskForPictures(now);
             if (now - _lastState >= StateEvery)
                 SendOwnState();
@@ -258,6 +259,7 @@ namespace FruktServer
                 data[1] = client.Id;
                 if (kind == Kind.WorldSweep && !Swept(client, Wire.ReadSweep(data), now))
                     return;
+                ObserveWorld(client, kind, data);
                 SendToScene(client, data);
                 return;
             }
@@ -271,6 +273,7 @@ namespace FruktServer
                     state.Hidden = false;
                     state.Relay = false;
                     state.Keeper = 0;
+                    state.Simulating = "";
                     PeerState before = client.State;
                     client.State = state;
                     if (before == null)
@@ -303,6 +306,22 @@ namespace FruktServer
                     ShotNotice shot = Wire.ReadShot(reader);
                     shot.Shooter = client.Id;
                     SendToAllBut(client, Wire.WriteShot(shot));
+                    if (InGame(client))
+                        ShotHit(client, shot);
+                    return;
+
+                case Kind.MapPart:
+                    TakeMapPiece(client, Shapes.ReadMapPiece(reader), now);
+                    return;
+
+                case Kind.ShapeInfo:
+                    reader.ReadByte();
+                    TakeShape(client, Shapes.ReadShapeInfo(reader));
+                    return;
+
+                case Kind.WorldGive:
+                    reader.ReadByte();
+                    TakeGift(client, reader.ReadUInt32(), reader.ReadUInt16());
                     return;
 
                 case Kind.Chat:
@@ -391,9 +410,9 @@ namespace FruktServer
                 return;
             _keeper = next;
             if (best != null)
-                Log(best.Name + "'s game now runs the shared world (props and NPCs).");
+                Log(best.Name + "'s game now runs the NPCs; the server simulates the props and items.");
             else if (_clients.Count > 0)
-                Log("Nobody is in a map, so nobody runs the shared world for now.");
+                Log("Nobody is in a map, so the shared world is paused.");
             SendOwnState();
         }
 
@@ -413,7 +432,8 @@ namespace FruktServer
                 Scene = _settings.Map,
                 Hidden = true,
                 Relay = true,
-                Keeper = _keeper
+                Keeper = _keeper,
+                Simulating = _simulating
             });
             foreach (Client client in _clients.Values)
                 Send(client.EndPoint, data);
@@ -423,6 +443,7 @@ namespace FruktServer
         {
             Log(_settings.Name + " on UDP port " + _settings.Port + ", map " + _settings.Map + ", " + Count() + ", up " + Uptime()
                 + ", " + (_bytesIn / 1024) + " KB in / " + (_bytesOut / 1024) + " KB out.");
+            Log(WorldStatus());
             Players();
         }
 
@@ -438,7 +459,7 @@ namespace FruktServer
             foreach (Client client in sorted)
             {
                 string where = client.State == null ? "connecting" : Where(client.State.Scene);
-                string keeper = client.Id == _keeper ? ", runs the shared world" : "";
+                string keeper = client.Id == _keeper ? ", runs the NPCs" : "";
                 string picture = client.Picture != null && client.Picture.Complete ? ", has a picture" : "";
                 Log("  " + client.Id + "  " + client.Name + "  " + where + ", " + client.EndPoint.Address + ", " + Minutes(Now - client.JoinedAt) + picture + keeper);
             }
@@ -481,6 +502,7 @@ namespace FruktServer
             }
             _clients.Clear();
             _socket.Dispose();
+            _physics?.Dispose();
         }
 
         void Drop(Client client, string why)
@@ -489,6 +511,7 @@ namespace FruktServer
                 return;
             _killsLogged.RemoveWhere(k => k / 256 == client.Id);
             Log(client.Name + why + ". " + Count());
+            OwnerLeft(client);
             byte[] leave = Wire.Write(Kind.Leave, w => w.Write(client.Id));
             foreach (Client other in _clients.Values)
                 Send(other.EndPoint, leave);

@@ -7,7 +7,7 @@
     "exported_at": "2026-09-26T00:00:00+00:00",
     "name": "FRUKT Dedicated Server",
     "author": "phoenix557@users.noreply.github.com",
-    "description": "A dedicated server for the FRUKT Multiplayer mod (github.com/Phoenix557/Frukt-DedicatedServer). It runs no game, so it needs almost no CPU or memory; the players' games share the world. The installer puts FruktServer in the server's folder. Players join with the server's IP and port.",
+    "description": "A dedicated server for the FRUKT Multiplayer mod (github.com/Phoenix557/Frukt-DedicatedServer). It needs no copy of the game: it simulates the map's props and items with its own physics (a few percent of one CPU core, under 100 MB of memory), while one player's game runs the NPCs. The installer puts FruktServer in the server's folder. Players join with the server's IP and port.",
     "features": null,
     "docker_images": {
         "FRUKT": "ghcr.io/phoenix557/frukt-server:latest"

@@ -70,9 +70,14 @@ namespace FruktServer
         {
             try
             {
-                string line;
-                while ((line = Console.ReadLine()) != null)
+                while (!_stopping)
                 {
+                    string line = Console.ReadLine();
+                    if (line == null)
+                    {
+                        Thread.Sleep(500);
+                        continue;
+                    }
                     if (line.Trim().Length > 0)
                         Commands.Enqueue(line.Trim());
                 }
@@ -91,7 +96,7 @@ namespace FruktServer
             {
                 case "help":
                 case "?":
-                    Server.Log("Commands: status, players, say <message>, kick <id or name>, clearbodies, clearnpcs, stop.");
+                    Server.Log("Commands: status, players, say <message>, kick <id or name>, clearbodies, clearnpcs, shake, stop.");
                     return;
                 case "clearbodies":
                 case "cleanup":
@@ -99,6 +104,9 @@ namespace FruktServer
                     return;
                 case "clearnpcs":
                     server.ClearNpcs();
+                    return;
+                case "shake":
+                    server.Shake();
                     return;
                 case "say":
                     if (rest.Length == 0)

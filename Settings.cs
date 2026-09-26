@@ -79,7 +79,7 @@ namespace FruktServer
 
         static void Usage()
         {
-            Console.WriteLine("FruktServer: a dedicated server for the FRUKT Multiplayer mod. It runs no game; players' games share the world.");
+            Console.WriteLine("FruktServer: a dedicated server for the FRUKT Multiplayer mod. It simulates props and items itself; one player's game runs the NPCs.");
             Console.WriteLine();
             Console.WriteLine("  --name <text>          name in the server list      (env SERVER_NAME, default \"FRUKT Server\")");
             Console.WriteLine("  --port <number>        UDP port                     (env SERVER_PORT, default 27777)");
