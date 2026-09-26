@@ -1,0 +1,77 @@
+name: Build
+
+# Every push to main rebuilds ghcr.io/phoenix557/frukt-server:latest, which Pterodactyl pulls when the server starts.
+# Pushing a tag like v1.0.1 also attaches FruktServer (Linux) and FruktServer.exe (Windows) to a GitHub release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE: ghcr.io/phoenix557/frukt-server
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish FruktServer for the image
+        run: >
+          dotnet publish FruktServer.csproj -c Release -r linux-musl-x64 --self-contained
+          -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o docker/bin --nologo
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tags
+        id: tags
+        run: |
+          tags="$IMAGE:latest,$IMAGE:sha-${GITHUB_SHA::7}"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then tags="$tags,$IMAGE:${GITHUB_REF_NAME#v}"; fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: docker
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish standalone servers
+        run: |
+          for rid in linux-x64 win-x64; do
+            dotnet publish FruktServer.csproj -c Release -r $rid --self-contained \
+              -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o out/$rid --nologo
+          done
+          mkdir dist
+          cp out/linux-x64/FruktServer dist/FruktServer
+          cp out/win-x64/FruktServer.exe dist/FruktServer.exe
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/FruktServer dist/FruktServer.exe egg-frukt-dedicated-server.json \
+            --title "FruktServer $GITHUB_REF_NAME" --generate-notes

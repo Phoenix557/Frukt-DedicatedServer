@@ -1,0 +1,62 @@
+{
+    "_comment": "Pterodactyl egg for a FRUKT Multiplayer dedicated server (FruktServer, no game or Wine needed).",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": "https://raw.githubusercontent.com/Phoenix557/Frukt-DedicatedServer/main/egg-frukt-dedicated-server.json"
+    },
+    "exported_at": "2026-09-26T00:00:00+00:00",
+    "name": "FRUKT Dedicated Server",
+    "author": "phoenix557@users.noreply.github.com",
+    "description": "A dedicated server for the FRUKT Multiplayer mod (github.com/Phoenix557). It runs no game, so it needs almost no CPU or memory; the players' games share the world. Players join with the server's IP and port, or find it in the MULTIPLAYER menu on their network.",
+    "features": null,
+    "docker_images": {
+        "FRUKT": "ghcr.io/phoenix557/frukt-server:latest"
+    },
+    "file_denylist": [],
+    "startup": "/opt/frukt/FruktServer",
+    "config": {
+        "files": "{}",
+        "startup": "{\"done\": \"is up on UDP port\"}",
+        "logs": "{}",
+        "stop": "stop"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/sh\n# FruktServer is inside the Docker image, so there is nothing to download.\nmkdir -p /mnt/server\necho \"Install finished. The server is in the image; just start it.\"\n",
+            "container": "alpine:3.22",
+            "entrypoint": "sh"
+        }
+    },
+    "variables": [
+        {
+            "name": "Server Name",
+            "description": "The name players see in the server list (up to 24 characters).",
+            "env_variable": "SERVER_NAME",
+            "default_value": "FRUKT Server",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:24",
+            "field_type": "text"
+        },
+        {
+            "name": "Map",
+            "description": "Map players load when they join: Yard, or any other FRUKT map name.",
+            "env_variable": "MAP",
+            "default_value": "Yard",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Max Players",
+            "description": "How many players can join at once (1 to 16).",
+            "env_variable": "MAX_PLAYERS",
+            "default_value": "8",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,16",
+            "field_type": "text"
+        }
+    ]
+}

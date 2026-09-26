@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>FruktServer</AssemblyName>
+    <RootNamespace>FruktServer</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>1.0.0</Version>
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="docker\**;dist\**" />
+  </ItemGroup>
+
+  <!-- Protocol.cs belongs to the Multiplayer mod; this copy keeps the repo buildable on its own (GitHub Actions). -->
+  <Target Name="SyncProtocol" BeforeTargets="BeforeBuild" Condition="Exists('..\Frukt-Multiplayer\Protocol.cs')">
+    <Copy SourceFiles="..\Frukt-Multiplayer\Protocol.cs" DestinationFiles="Protocol.cs" SkipUnchangedFiles="true" />
+  </Target>
+</Project>
