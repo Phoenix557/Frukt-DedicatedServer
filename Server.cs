@@ -297,9 +297,25 @@ namespace FruktServer
                     Client victim = ById(kill.Victim);
                     if (victim == null)
                         return;
+                    byte[] killed = Wire.WriteKill(kill);
                     if (_killsLogged.Add(kill.Victim * 256 + kill.Life))
+                    {
                         Log(victim.Name + " was killed by " + kill.Killer + ".");
-                    Send(victim.EndPoint, Wire.WriteKill(kill));
+                        foreach (Client other in _clients.Values)
+                            Send(other.EndPoint, killed);
+                        return;
+                    }
+                    Send(victim.EndPoint, killed);
+                    return;
+
+                case Kind.Corpse:
+                    CorpseHead corpse = Wire.ReadCorpse(reader);
+                    Client dead = ById(corpse.Victim);
+                    if (dead == null || dead == client)
+                        return;
+                    corpse.From = client.Id;
+                    // Everyone gets it: the victim follows their body with the camera, the rest lay their copy of the corpse out the same way.
+                    SendToAllBut(client, Wire.WriteCorpse(corpse));
                     return;
 
                 case Kind.Shot:

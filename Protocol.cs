@@ -38,7 +38,27 @@ namespace Multiplayer
         /// <summary>
         /// Player to server: this thing of mine is at rest and nobody holds it, so the server may simulate it.
         /// </summary>
-        WorldGive = 23
+        WorldGive = 23,
+        /// <summary>
+        /// Where a dead player's body has its head on the screen that killed it, sent to that player so their camera can follow it, and
+        /// to everyone else so their copy of the corpse lies the same way.
+        /// </summary>
+        Corpse = 24,
+        /// <summary>
+        /// Host to players: the physics rework switches that change what a shot does (ricochets, pellet damage), so every screen follows
+        /// the host's. Older mods and the standalone server ignore it.
+        /// </summary>
+        Rules = 25
+    }
+
+    [Flags]
+    enum Rule : byte
+    {
+        None = 0,
+        Ricochets = 1,
+        PelletDamage = 2,
+        /// <summary>Set on every rules packet, so an empty set of switches still reads as "the host sent rules".</summary>
+        Sent = 128
     }
 
     enum Sweep : byte
@@ -159,6 +179,34 @@ namespace Multiplayer
         public string Killer = "";
     }
 
+    sealed class CorpseHead
+    {
+        public const int MaxLimbs = 48;
+
+        public byte From;
+        public byte Victim;
+        public byte Life;
+        /// <summary>
+        /// Where the dead body's eyes are and which way they face, so its player can look out of them while it falls.
+        /// </summary>
+        public float X, Y, Z;
+        public float Qx, Qy, Qz, Qw = 1f;
+        /// <summary>
+        /// Every part of the dead body, so its player's screen can lay a copy out the same way.
+        /// </summary>
+        public LimbPose[] Limbs = new LimbPose[0];
+    }
+
+    struct LimbPose
+    {
+        /// <summary>
+        /// Stands for the part's place in the body, the same number on every screen.
+        /// </summary>
+        public ushort Key;
+        public float X, Y, Z;
+        public float Qx, Qy, Qz, Qw;
+    }
+
     /// <summary>
     /// One shot from a player's gun: which gun, where its muzzle was and which way the round left.
     /// </summary>
@@ -206,12 +254,22 @@ namespace Multiplayer
         /// On a relay server, the map whose props and items the server simulates itself, or empty while it has none loaded.
         /// </summary>
         public string Simulating = "";
+        /// <summary>
+        /// Dead and flying around as a ghost until they respawn: shown see-through, touches and is touched by nothing.
+        /// </summary>
+        public bool Ghost;
+        /// <summary>
+        /// Each limb relative to the eyes, so another screen can wear the same pose. Empty when the sender has no body yet.
+        /// </summary>
+        public LimbPose[] Pose = new LimbPose[0];
+        /// <summary>Limbs that are already gone on the sender, so the copy does not keep drawing them.</summary>
+        public ushort[] Missing = new ushort[0];
         public double HeardAt;
     }
 
     static class Wire
     {
-        public const ushort Protocol = 9;
+        public const ushort Protocol = 10;
         public const int MaxPlayers = 8;
         /// <summary>
         /// Queries are padded to this size so answering one never sends back more than was received.
@@ -284,12 +342,46 @@ namespace Multiplayer
                 w.Write(s.Keeper);
                 w.Write(s.Avatar);
                 w.Write(Clip(s.Simulating, MaxScene));
+                w.Write(s.Ghost);
+                WritePose(w, s.Pose, s.Missing);
             });
+        }
+
+        static void WritePose(BinaryWriter w, LimbPose[] pose, ushort[] missing)
+        {
+            int count = pose == null ? 0 : Math.Min(pose.Length, CorpseHead.MaxLimbs);
+            w.Write((byte)count);
+            for (int i = 0; i < count; i++)
+            {
+                LimbPose limb = pose[i];
+                w.Write(limb.Key);
+                w.Write(PackSpan(limb.X));
+                w.Write(PackSpan(limb.Y));
+                w.Write(PackSpan(limb.Z));
+                w.Write(PackTurn(limb.Qx));
+                w.Write(PackTurn(limb.Qy));
+                w.Write(PackTurn(limb.Qz));
+                w.Write(PackTurn(limb.Qw));
+            }
+            int gone = missing == null ? 0 : Math.Min(missing.Length, CorpseHead.MaxLimbs);
+            w.Write((byte)gone);
+            for (int i = 0; i < gone; i++)
+                w.Write(missing[i]);
+        }
+
+        static short PackSpan(float metres)
+        {
+            return (short)Math.Max(-32767, Math.Min(32767, (int)Math.Round(metres * 1000.0)));
+        }
+
+        static float UnpackSpan(short value)
+        {
+            return value / 1000f;
         }
 
         public static PeerState ReadState(BinaryReader r)
         {
-            return new PeerState
+            var state = new PeerState
             {
                 Id = r.ReadByte(),
                 Name = Clip(r.ReadString(), MaxName),
@@ -315,8 +407,39 @@ namespace Multiplayer
                 Relay = r.ReadBoolean(),
                 Keeper = r.ReadByte(),
                 Avatar = r.ReadUInt32(),
-                Simulating = Clip(r.ReadString(), MaxScene)
+                Simulating = Clip(r.ReadString(), MaxScene),
+                Ghost = r.ReadBoolean()
             };
+            ReadPose(r, state);
+            return state;
+        }
+
+        static void ReadPose(BinaryReader r, PeerState state)
+        {
+            if (r.BaseStream.Position >= r.BaseStream.Length)
+                return;
+            int count = Math.Min((int)r.ReadByte(), CorpseHead.MaxLimbs);
+            state.Pose = new LimbPose[count];
+            for (int i = 0; i < count; i++)
+            {
+                state.Pose[i] = new LimbPose
+                {
+                    Key = r.ReadUInt16(),
+                    X = UnpackSpan(r.ReadInt16()),
+                    Y = UnpackSpan(r.ReadInt16()),
+                    Z = UnpackSpan(r.ReadInt16()),
+                    Qx = UnpackTurn(r.ReadInt16()),
+                    Qy = UnpackTurn(r.ReadInt16()),
+                    Qz = UnpackTurn(r.ReadInt16()),
+                    Qw = UnpackTurn(r.ReadInt16())
+                };
+            }
+            if (r.BaseStream.Position >= r.BaseStream.Length)
+                return;
+            int gone = Math.Min((int)r.ReadByte(), CorpseHead.MaxLimbs);
+            state.Missing = new ushort[gone];
+            for (int i = 0; i < gone; i++)
+                state.Missing[i] = r.ReadUInt16();
         }
 
         public static byte[] WriteShot(ShotNotice s)
@@ -367,6 +490,91 @@ namespace Multiplayer
                 Life = r.ReadByte(),
                 Killer = Clip(r.ReadString(), MaxName)
             };
+        }
+
+        public static byte[] WriteCorpse(CorpseHead c)
+        {
+            return Write(Kind.Corpse, w =>
+            {
+                w.Write(c.From);
+                w.Write(c.Victim);
+                w.Write(c.Life);
+                w.Write(c.X);
+                w.Write(c.Y);
+                w.Write(c.Z);
+                w.Write(PackTurn(c.Qx));
+                w.Write(PackTurn(c.Qy));
+                w.Write(PackTurn(c.Qz));
+                w.Write(PackTurn(c.Qw));
+                int count = Math.Min(c.Limbs == null ? 0 : c.Limbs.Length, CorpseHead.MaxLimbs);
+                w.Write((byte)count);
+                for (int i = 0; i < count; i++)
+                {
+                    LimbPose limb = c.Limbs[i];
+                    w.Write(limb.Key);
+                    w.Write(limb.X);
+                    w.Write(limb.Y);
+                    w.Write(limb.Z);
+                    w.Write(PackTurn(limb.Qx));
+                    w.Write(PackTurn(limb.Qy));
+                    w.Write(PackTurn(limb.Qz));
+                    w.Write(PackTurn(limb.Qw));
+                }
+            });
+        }
+
+        public static CorpseHead ReadCorpse(BinaryReader r)
+        {
+            CorpseHead corpse = new CorpseHead
+            {
+                From = r.ReadByte(),
+                Victim = r.ReadByte(),
+                Life = r.ReadByte(),
+                X = r.ReadSingle(),
+                Y = r.ReadSingle(),
+                Z = r.ReadSingle(),
+                Qx = UnpackTurn(r.ReadInt16()),
+                Qy = UnpackTurn(r.ReadInt16()),
+                Qz = UnpackTurn(r.ReadInt16()),
+                Qw = UnpackTurn(r.ReadInt16())
+            };
+            int count = Math.Min((int)r.ReadByte(), CorpseHead.MaxLimbs);
+            corpse.Limbs = new LimbPose[count];
+            for (int i = 0; i < count; i++)
+            {
+                corpse.Limbs[i] = new LimbPose
+                {
+                    Key = r.ReadUInt16(),
+                    X = r.ReadSingle(),
+                    Y = r.ReadSingle(),
+                    Z = r.ReadSingle(),
+                    Qx = UnpackTurn(r.ReadInt16()),
+                    Qy = UnpackTurn(r.ReadInt16()),
+                    Qz = UnpackTurn(r.ReadInt16()),
+                    Qw = UnpackTurn(r.ReadInt16())
+                };
+            }
+            return corpse;
+        }
+
+        static short PackTurn(float value)
+        {
+            return (short)Math.Round(Math.Max(-1f, Math.Min(1f, value)) * short.MaxValue);
+        }
+
+        static float UnpackTurn(short value)
+        {
+            return value / (float)short.MaxValue;
+        }
+
+        public static byte[] WriteRules(Rule rules)
+        {
+            return Write(Kind.Rules, w => w.Write((byte)(rules | Rule.Sent)));
+        }
+
+        public static Rule ReadRules(BinaryReader r)
+        {
+            return (Rule)r.ReadByte();
         }
 
         public static byte[] WriteChat(ChatLine line)
